@@ -1,0 +1,2 @@
+// A day, and a time on it, where some clock says: what an Offset says of an Instant.
+type DateTime(date: Date, time: Time)

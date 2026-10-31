@@ -1,0 +1,108 @@
+import fckt.time.Instant
+import fckt.time.Clock
+import uk.m4xy.time.Dates.*
+
+// Moments, as a clock somewhere says them: an Instant as the day and time an Offset has it, and
+// back; and as ISO 8601 writes them, 2026-10-31T09:30:00Z or 2026-10-31T10:30:00.250+01:00.
+module DateTimes {
+  utc: Offset = Offset(0)
+
+  // The day and time at instant, where the clock is offset from UTC.
+  at(instant: Instant, offset: Offset = utc): DateTime = {
+    local = instant.millis + offset.minutes * 60000
+    days = floorDiv(local, 86400000)
+    ofDay = local - days * 86400000
+    DateTime(
+      fromEpochDay(days),
+      Time(ofDay / 3600000, ofDay / 60000 % 60, ofDay / 1000 % 60, ofDay % 1000),
+    )
+  }
+
+  // The instant it's that day and time, where the clock is offset from UTC.
+  DateTime.instant(offset: Offset = utc): Instant = Instant(
+    this.date.epochDay * 86400000 + this.time.hour * 3600000 + this.time.minute * 60000 +
+      this.time.second * 1000 + this.time.millis - offset.minutes * 60000,
+  )
+
+  // Today, where the clock is offset from UTC.
+  @Clock today(offset: Offset = utc): Date = at(now(), offset).date
+
+  // The instant, as ISO 8601 writes it where the clock is offset: its milliseconds if it has any,
+  // Z for UTC.
+  iso(instant: Instant, offset: Offset = utc): String = {
+    shown = at(instant, offset)
+    t = shown.time
+    seconds = padded(t.second, 2) + (if (t.millis == 0) "" else "." + padded(t.millis, 3))
+    "${shown.date.iso}T${padded(t.hour, 2)}:${padded(t.minute, 2)}:$seconds${offsetText(offset)}"
+  }
+
+  // The instant ISO 8601 text says, with Z or an offset, its seconds and their fraction optional:
+  // 2026-10-31T09:30Z, 2026-10-31T10:30:00.25+01:00.
+  parse(text: String): Option<Instant> = {
+    datePart = text.substringBefore("T")
+    rest = text.substringAfter("T")
+    zone = if (rest.endsWith("Z")) Some(("", utc))
+    else {
+      sign = max(rest.lastIndexOf("+"), rest.lastIndexOf("-"))
+      if (sign < 0) None
+      else offsetOf(rest.drop(sign)).map { (rest.take(sign), it) }
+    }
+    if (!text.contains("T")) None
+    else Dates.parse(datePart).flatMap { date ->
+      zone.flatMap { found ->
+        (clock, offset) = found
+        timeOf(if (clock.isEmpty()) rest.dropLast(1) else clock).map { time ->
+          DateTime(date, time).instant(offset)
+        }
+      }
+    }
+  }
+
+  // hh:mm, hh:mm:ss or hh:mm:ss.fff, the fraction to a millisecond.
+  private timeOf(text: String): Option<Time> = {
+    whole = text.substringBefore(".")
+    fraction = if (text.contains(".")) Some(text.substringAfter(".")) else None
+    millis = when (fraction) {
+      Some(f) -> if (f.isEmpty() || f.length > 9) None else digits(f.padEnd(3, '0').take(3))
+      None -> Some(0)
+    }
+    when (whole.split(":")) {
+      [h, m] if fraction.isNone() -> clock(h, m, "00", Some(0))
+      [h, m, s] -> clock(h, m, s, millis)
+      else -> None
+    }
+  }
+
+  private clock(h: String, m: String, s: String, millis: Option<Int>): Option<Time> =
+    if (h.length != 2 || m.length != 2 || s.length != 2) None
+    else digits(h).flatMap { hour ->
+      digits(m).flatMap { minute ->
+        digits(s).flatMap { second ->
+          millis.flatMap { ms ->
+            if (hour <= 23 && minute <= 59 && second <= 59) Some(Time(hour, minute, second, ms))
+            else None
+          }
+        }
+      }
+    }
+
+  // +hh:mm or -hh:mm.
+  private offsetOf(text: String): Option<Offset> = {
+    sign = if (text.startsWith("-")) -1 else 1
+    when (text.drop(1).split(":")) {
+      [h, m] if h.length == 2 && m.length == 2 -> digits(h).flatMap { hours ->
+        digits(m).flatMap { minutes ->
+          if (hours <= 23 && minutes <= 59) Some(Offset(sign * (hours * 60 + minutes))) else None
+        }
+      }
+      else -> None
+    }
+  }
+
+  private offsetText(offset: Offset): String =
+    if (offset.minutes == 0) "Z"
+    else {
+      size = if (offset.minutes < 0) -offset.minutes else offset.minutes
+      (if (offset.minutes < 0) "-" else "+") + padded(size / 60, 2) + ":" + padded(size % 60, 2)
+    }
+}

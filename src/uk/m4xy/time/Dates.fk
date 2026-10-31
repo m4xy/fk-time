@@ -1,0 +1,100 @@
+// Days on the calendar: which there are, what day of the week each is, and days, months and years
+// on from one; and a day as ISO 8601 writes it, 2026-10-31. A day is counted from 1970-01-01, its
+// epoch day, as Howard Hinnant's algorithms count them, so it's right for any year.
+module Dates {
+  // The day, if there is one: Dates.of(2024, 2, 29) is, Dates.of(2023, 2, 29) isn't.
+  of(year: Int, month: Int, day: Int): Option<Date> =
+    if (month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(year, month)) Some(
+      Date(year, month, day),
+    )
+    else None
+
+  isLeapYear(year: Int): Boolean = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
+
+  daysInMonth(year: Int, month: Int): Int =
+    if (month == 2) (if (isLeapYear(year)) 29 else 28)
+    else if (month == 4 || month == 6 || month == 9 || month == 11) 30
+    else 31
+
+  // Days since 1970-01-01, before it below 0.
+  Date.epochDay: Int = {
+    y = if (this.month <= 2) this.year - 1 else this.year
+    era = (if (y >= 0) y else y - 399) / 400
+    yearOfEra = y - era * 400
+    dayOfYear = (153 * (if (this.month > 2) this.month - 3 else this.month + 9) + 2) / 5 + this.day - 1
+    dayOfEra = yearOfEra * 365 + yearOfEra / 4 - yearOfEra / 100 + dayOfYear
+    era * 146097 + dayOfEra - 719468
+  }
+
+  // The day that many days since 1970-01-01.
+  fromEpochDay(days: Int): Date = {
+    z = days + 719468
+    era = (if (z >= 0) z else z - 146096) / 146097
+    dayOfEra = z - era * 146097
+    yearOfEra = (dayOfEra - dayOfEra / 1460 + dayOfEra / 36524 - dayOfEra / 146096) / 365
+    dayOfYear = dayOfEra - (365 * yearOfEra + yearOfEra / 4 - yearOfEra / 100)
+    shifted = (5 * dayOfYear + 2) / 153
+    day = dayOfYear - (153 * shifted + 2) / 5 + 1
+    month = if (shifted < 10) shifted + 3 else shifted - 9
+    Date(yearOfEra + era * 400 + (if (month <= 2) 1 else 0), month, day)
+  }
+
+  Date.weekday: Weekday = when (floorMod(this.epochDay + 3, 7)) {
+    0 -> Monday
+    1 -> Tuesday
+    2 -> Wednesday
+    3 -> Thursday
+    4 -> Friday
+    5 -> Saturday
+    else -> Sunday
+  }
+
+  Date.plusDays(days: Int): Date = fromEpochDay(this.epochDay + days)
+
+  // The same day of the month, months on, or the month's last if it has fewer: a month on from
+  // 2024-01-31 is 2024-02-29.
+  Date.plusMonths(months: Int): Date = {
+    counted = this.year * 12 + (this.month - 1) + months
+    year = floorDiv(counted, 12)
+    month = floorMod(counted, 12) + 1
+    Date(year, month, min(this.day, daysInMonth(year, month)))
+  }
+
+  Date.plusYears(years: Int): Date = this.plusMonths(years * 12)
+
+  // How many days from this to later: below 0 if later is before it.
+  Date.daysUntil(later: Date): Int = later.epochDay - this.epochDay
+
+  Date.isBefore(other: Date): Boolean = this.epochDay < other.epochDay
+
+  Date.isAfter(other: Date): Boolean = this.epochDay > other.epochDay
+
+  Date.dayOfYear: Int = Date(this.year, 1, 1).daysUntil(this) + 1
+
+  // The day as ISO 8601 writes it: 2026-10-31; a year before 0 or after 9999 with its sign.
+  Date.iso: String = {
+    year = if (this.year >= 0 && this.year <= 9999) padded(this.year, 4)
+    else if (this.year < 0) "-" + padded(-this.year, 6)
+    else "+" + padded(this.year, 6)
+    "$year-${padded(this.month, 2)}-${padded(this.day, 2)}"
+  }
+
+  // The day ISO 8601 writes as text, 2026-10-31, if there is one.
+  parse(text: String): Option<Date> = when (text.split("-")) {
+    [y, m, d] if y.length == 4 && m.length == 2 && d.length == 2 -> digits(y).flatMap { year ->
+      digits(m).flatMap { month -> digits(d).flatMap { day -> of(year, month, day) } }
+    }
+    else -> None
+  }
+
+  internal padded(n: Int, width: Int): String = n.toString().padStart(width, '0')
+
+  // The number the text's digits are, only digits.
+  internal digits(text: String): Option<Int> =
+    if (text.isNotEmpty() && text.toList().all { it.isDigit() }) text.toIntOrNone() else None
+
+  // Division and remainder that round down, so a day before 1970 is on the day before.
+  internal floorDiv(a: Int, b: Int): Int = if (a >= 0 || a % b == 0) a / b else a / b - 1
+
+  internal floorMod(a: Int, b: Int): Int = a - floorDiv(a, b) * b
+}

@@ -1,0 +1,2 @@
+// A time of day: its hour, 0 to 23, minute and second, 0 to 59, and millisecond, 0 to 999.
+type Time(hour: Int, minute: Int, second: Int = 0, millis: Int = 0)

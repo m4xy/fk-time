@@ -1,0 +1,86 @@
+import uk.m4xy.fktests.api.Test
+import fckt.time.Instant
+import fckt.time.Clock
+import uk.m4xy.time.*
+import uk.m4xy.time.Dates.*
+import uk.m4xy.time.DateTimes.*
+
+@Test daysAreCountedFrom1970() = {
+  assertEquals(0, Date(1970, 1, 1).epochDay)
+  assertEquals(20757, Date(2026, 10, 31).epochDay)
+  assertEquals(-135081, Date(1600, 2, 29).epochDay)
+  assertEquals(Date(2026, 10, 31), fromEpochDay(20757))
+  assertEquals(Date(1969, 12, 31), fromEpochDay(-1))
+}
+
+// Every day, back and forward four thousand years, is counted back to itself, a day after the last.
+@Test everyDayIsCountedBack() = {
+  (-1460000..<1460000).filter { it % 997 == 0 }.forEach { n ->
+    assertEquals(n, fromEpochDay(n).epochDay)
+    assertEquals(fromEpochDay(n + 1), fromEpochDay(n).plusDays(1))
+  }
+}
+
+@Test whichDaysThereAre() = {
+  assertEquals(Some(Date(2024, 2, 29)), Dates.of(2024, 2, 29))
+  assertEquals(None, Dates.of(2023, 2, 29))
+  assertEquals(None, Dates.of(1900, 2, 29))
+  assertEquals(Some(Date(2000, 2, 29)), Dates.of(2000, 2, 29))
+  assertEquals(None, Dates.of(2026, 13, 1))
+  assertEquals(None, Dates.of(2026, 4, 31))
+}
+
+@Test weekdays() = {
+  assertEquals(Thursday, Date(1970, 1, 1).weekday)
+  assertEquals(Saturday, Date(2026, 10, 31).weekday)
+  assertEquals(Wednesday, Date(1969, 12, 31).weekday)
+  assertEquals(Sunday, Date(1600, 1, 2).weekday)
+}
+
+@Test monthsOnAreTheSameDayOrTheMonthsLast() = {
+  assertEquals(Date(2024, 2, 29), Date(2024, 1, 31).plusMonths(1))
+  assertEquals(Date(2024, 1, 15), Date(2023, 12, 15).plusMonths(1))
+  assertEquals(Date(2023, 12, 15), Date(2024, 1, 15).plusMonths(-1))
+  assertEquals(Date(2025, 2, 28), Date(2024, 2, 29).plusYears(1))
+  assertEquals(366, Date(2024, 1, 1).daysUntil(Date(2025, 1, 1)))
+  assertEquals(305, Date(2026, 11, 1).dayOfYear)
+}
+
+@Test daysAsIsoWritesThem() = {
+  assertEquals("2026-10-31", Date(2026, 10, 31).iso)
+  assertEquals("0099-01-02", Date(99, 1, 2).iso)
+  assertEquals("+010000-01-01", Date(10000, 1, 1).iso)
+  assertEquals(Some(Date(2026, 10, 31)), Dates.parse("2026-10-31"))
+  assertEquals(None, Dates.parse("2026-02-30"))
+  assertEquals(None, Dates.parse("2026-1-31"))
+}
+
+@Test momentsWhereAClockIs() = {
+  assertEquals(DateTime(Date(1970, 1, 1), Time(0, 0)), at(Instant(0)))
+  assertEquals(DateTime(Date(1969, 12, 31), Time(23, 59, 59, 999)), at(Instant(-1)))
+  assertEquals(
+    DateTime(Date(2026, 10, 31), Time(10, 30, 0, 250)),
+    at(Instant(1793439000250), Offset(60)),
+  )
+  assertEquals(
+    Instant(1793439000250),
+    DateTime(Date(2026, 10, 31), Time(4, 30, 0, 250)).instant(Offset(-300)),
+  )
+}
+
+@Test momentsAsIsoWritesThem() = {
+  assertEquals("2026-10-31T09:30:00.250Z", iso(Instant(1793439000250)))
+  assertEquals("2026-10-31T11:00:00.250+01:30", iso(Instant(1793439000250), Offset(90)))
+  assertEquals("1969-07-20T20:17:00Z", iso(Instant(-14182980000)))
+  assertEquals(Some(Instant(1793439000250)), DateTimes.parse("2026-10-31T10:30:00.25+01:00"))
+  assertEquals(Some(Instant(-14182980000)), DateTimes.parse("1969-07-20T15:17-05:00"))
+  assertEquals(Some(Instant(-14182980000)), DateTimes.parse("1969-07-20T20:17:00Z"))
+  assertEquals(None, DateTimes.parse("2026-10-31 09:30:00Z"))
+  assertEquals(None, DateTimes.parse("2026-10-31T24:00:00Z"))
+  assertEquals(None, DateTimes.parse("2026-10-31T09:30:00"))
+}
+
+@Test @Clock todayIsWhatTheClockSays() = assertEquals(
+  Date(2026, 11, 1),
+  Clock(now = () -> Instant(1793439000250)) { today(Offset(15 * 60)) },
+)

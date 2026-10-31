@@ -1,0 +1,3 @@
+// A day on the calendar, as the Gregorian calendar has it, every year back and forward: its year, its
+// month, 1 to 12, and its day of the month. Dates.of says whether there is such a day.
+type Date(year: Int, month: Int, day: Int)

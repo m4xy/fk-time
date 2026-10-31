@@ -1,0 +1,2 @@
+// How far ahead of UTC a clock is, in minutes: 60 for +01:00, -300 for -05:00.
+type Offset(minutes: Int)
